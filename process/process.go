@@ -452,7 +452,7 @@ func (p *Process) setProgramRestartChangeMonitor(programPath string) {
 
 }
 
-// wait for the started program exit
+// wait for the started program exit 阻塞
 func (p *Process) waitForExit(startSecs int64) {
 	err := p.cmd.Wait()
 	if err != nil {
