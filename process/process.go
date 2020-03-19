@@ -156,11 +156,12 @@ func (p *Process) Start(wait bool) {
 	}
 
 	go func() {
-
+		// 无限启动
 		for {
 			if wait {
 				runCond.L.Lock()
 			}
+			// 阻塞在此，直到进程结束，或达到最大重启次数
 			p.run(func() {
 				finished = true
 				if wait {
@@ -176,6 +177,7 @@ func (p *Process) Start(wait bool) {
 				log.WithFields(log.Fields{"program": p.GetName()}).Info("Stopped by user, don't start it again")
 				break
 			}
+			// 如果 设置为 true 将会无限制一直拉起
 			if !p.isAutoRestart() {
 				log.WithFields(log.Fields{"program": p.GetName()}).Info("Don't start the stopped program because its autorestart flag is false")
 				break
@@ -348,6 +350,7 @@ func (p *Process) isAutoRestart() bool {
 			//If unexpected, the process will be restarted when the program exits
 			//with an exit code that is not one of the exit codes associated with
 			//this process’ configuration (see exitcodes).
+			// 当 exit code 为非预期值时 返回 true
 			return err == nil && !p.inExitCodes(exitCode)
 		}
 	}
@@ -355,6 +358,7 @@ func (p *Process) isAutoRestart() bool {
 
 }
 
+// 如果 exit code 为预期值返回 true
 func (p *Process) inExitCodes(exitCode int) bool {
 	for _, code := range p.getExitCodes() {
 		if code == exitCode {
@@ -376,6 +380,7 @@ func (p *Process) getExitCode() (int, error) {
 
 }
 
+// 被正常结束的 exit code
 func (p *Process) getExitCodes() []int {
 	strExitCodes := strings.Split(p.config.GetString("exitcodes", "0,2"), ",")
 	result := make([]int, 0)
@@ -452,7 +457,8 @@ func (p *Process) setProgramRestartChangeMonitor(programPath string) {
 
 }
 
-// wait for the started program exit 阻塞
+// wait for the started program exit
+//阻塞
 func (p *Process) waitForExit(startSecs int64) {
 	err := p.cmd.Wait()
 	if err != nil {
@@ -494,6 +500,7 @@ func (p *Process) monitorProgramIsRunning(endTime time.Time, monitorExited *int3
 	}
 }
 
+// 拉起进程，并守护进程直到进程被关闭
 func (p *Process) run(finishCb func()) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -516,6 +523,7 @@ func (p *Process) run(finishCb func()) {
 		once.Do(finishCb)
 	}
 	//process is not expired and not stoped by user
+	// 循环启动进程，直到重试次数到最大
 	for !p.stopByUser {
 		if restartPause > 0 && atomic.LoadInt32(p.retryTimes) != 0 {
 			//pause
@@ -562,6 +570,7 @@ func (p *Process) run(finishCb func()) {
 			p.changeStateTo(Running)
 			go finishCbWrapper()
 		} else {
+			// 异步监听进程存活时间是否满足
 			go func() {
 				p.monitorProgramIsRunning(endTime, &monitorExited, &programExited)
 				finishCbWrapper()
@@ -569,10 +578,12 @@ func (p *Process) run(finishCb func()) {
 		}
 		log.WithFields(log.Fields{"program": p.GetName()}).Debug("wait program exit")
 		p.lock.Unlock()
+		// 进程启动后被阻塞在此，等待结束
 		p.waitForExit(startSecs)
 
 		atomic.StoreInt32(&programExited, 1)
 		// wait for monitor thread exit
+		// 等待异步监听启动存活时常结束
 		for atomic.LoadInt32(&monitorExited) == 0 {
 			time.Sleep(time.Duration(10) * time.Millisecond)
 		}
@@ -672,6 +683,7 @@ func (p *Process) setDir() {
 	}
 }
 
+// 设置进程输出的日志
 func (p *Process) setLog() {
 	if p.config.IsProgram() {
 		p.StdoutLog = p.createLogger(p.GetStdoutLogfile(),
